@@ -1,0 +1,1 @@
+package pe.sigip.design.repository; import pe.sigip.design.model.Diseno; import org.springframework.data.jpa.repository.JpaRepository; public interface DisenoRepository extends JpaRepository<Diseno,Long>{}
