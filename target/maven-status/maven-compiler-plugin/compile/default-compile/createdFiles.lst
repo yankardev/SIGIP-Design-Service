@@ -1,0 +1,14 @@
+pe\edu\cibertec\sigip\designservice\client\PedidoResumen.class
+pe\edu\cibertec\sigip\designservice\dto\DecisionRequest$Decision.class
+pe\edu\cibertec\sigip\designservice\model\Diseno.class
+pe\edu\cibertec\sigip\designservice\repository\DisenoRepository.class
+pe\edu\cibertec\sigip\designservice\controller\DisenoController.class
+pe\edu\cibertec\sigip\designservice\dto\DecisionRequest.class
+pe\edu\cibertec\sigip\designservice\model\EstadoDiseno.class
+pe\edu\cibertec\sigip\designservice\dto\DisenoRequest.class
+pe\edu\cibertec\sigip\designservice\model\Diseno$DisenoBuilder.class
+pe\edu\cibertec\sigip\designservice\service\DisenoService.class
+pe\edu\cibertec\sigip\designservice\client\SalesServiceClient$Fallback.class
+pe\edu\cibertec\sigip\designservice\dto\DisenoResponse.class
+pe\edu\cibertec\sigip\designservice\DesignServiceApplication.class
+pe\edu\cibertec\sigip\designservice\client\SalesServiceClient.class

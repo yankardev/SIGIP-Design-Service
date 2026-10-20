@@ -1,14 +1,24 @@
-# SIGIP-Design-Service
+# design-service
 
-Gestión de diseños y aprobaciones para SIGIP.
+Diseños: versiones del arte y aprobación del cliente.
 
-- Java 25
-- Spring Boot 3.5.6
-- Spring Cloud 2025.0.0
-- Configuración: application.properties
-- Puerto local: 8096
-- Base de datos: sigip_design
+## Funcionalidad
 
-Configura `DB_USERNAME` y `DB_PASSWORD` en el entorno local si no utilizas las credenciales por defecto. Requiere MySQL y Eureka (puerto 8761).
+- `GET|POST|PUT|DELETE /api/v1/disenos` (escritura ADMIN; el cliente ve los de sus pedidos).
+- Cada nueva versión reemplaza a la anterior; no se sube otra si ya hay una aprobada.
+- `POST /api/v1/disenos/{id}/decision` → el cliente APRUEBA u OBSERVA (con comentario) la versión vigente.
+- Valida el pedido en sales-service con Feign.
 
-Endpoint de salud: `GET /api/design/health` (consulta la ruta del controlador para el path exacto).
+## Pruebas
+
+- `DisenoRepositoryTest`, `DisenoFlujoIntegrationTest`
+
+## Ejecución
+
+Puerto `8096`. Base local `sigip_design` (MySQL); en la nube, esquema propio en PostgreSQL.
+
+Variables: `DB_USER`, `DB_PASSWORD`, `JWT_SECRET` (o `DB_URL` completa).
+
+```bash
+mvn -pl backend/design-service -am spring-boot:run
+```
