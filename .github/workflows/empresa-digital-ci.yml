@@ -1,0 +1,22 @@
+name: Empresa Digital CI
+on:
+  push:
+    branches: [feature/sigip-empresa-digital]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: yankardev/SIGIP-Common
+          ref: feature/sigip-empresa-digital
+          path: sigip-common
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - run: mvn -B -f sigip-common/pom.xml -DskipTests install
+      - run: mvn -B -DskipTests package
