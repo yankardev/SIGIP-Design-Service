@@ -20,53 +20,41 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Reglas de diseño:
- * - Cada nueva versión reemplaza a la anterior (que queda en el historial).
- * - Solo el dueño del pedido puede aprobar u observar, y solo la versión vigente en revisión.
- * - Una versión ya decidida no se edita ni se elimina.
+ * Gestión interna del arte: Operaciones publica versiones y valida la versión final
+ * antes de permitir que el trabajo continúe a producción.
  */
 @Service
 @RequiredArgsConstructor
 public class DisenoService {
 
-    private static final Set<String> ESTADOS_PEDIDO_VALIDOS =
-            Set.of("REGISTRADO", "PAGO_EN_REVISION", "CONFIRMADO", "EN_DISENO");
+    private static final Set<String> ESTADOS_PEDIDO_VALIDOS = Set.of("CONFIRMADO", "EN_DISENO");
 
     private final DisenoRepository disenoRepository;
     private final SalesServiceClient salesClient;
 
     @Transactional(readOnly = true)
     public List<DisenoResponse> listar(Integer idpedido, UsuarioActual usuario) {
-        List<Diseno> disenos;
-        if (idpedido != null) {
-            disenos = disenoRepository.findByIdpedidoOrderByVersionDesc(idpedido);
-        } else if (usuario.esAdmin()) {
-            disenos = disenoRepository.findAllByOrderByFechaRegistroDesc();
-        } else {
-            disenos = disenoRepository.findByClienteOrderByFechaRegistroDesc(usuario.nombre());
-        }
-        return disenos.stream()
-                .filter(d -> usuario.esAdmin() || d.getCliente().equals(usuario.nombre()))
-                .map(DisenoResponse::from)
-                .toList();
+        List<Diseno> disenos = idpedido != null
+                ? disenoRepository.findByIdpedidoOrderByVersionDesc(idpedido)
+                : disenoRepository.findAllByOrderByFechaRegistroDesc();
+        return disenos.stream().map(DisenoResponse::from).toList();
     }
 
     @Transactional(readOnly = true)
     public DisenoResponse obtener(Integer id, UsuarioActual usuario) {
-        return DisenoResponse.from(buscarVisible(id, usuario));
+        return DisenoResponse.from(buscar(id));
     }
 
     @Transactional
     public DisenoResponse registrar(DisenoRequest request, UsuarioActual usuario) {
         PedidoResumen pedido = salesClient.obtenerPedido(request.idpedido());
         if (!ESTADOS_PEDIDO_VALIDOS.contains(pedido.estado())) {
-            throw new ReglaNegocioException("No se pueden registrar diseños para un pedido en estado " + pedido.estado());
+            throw new ReglaNegocioException("El diseño solo puede iniciarse después de verificar el pago. Estado actual: " + pedido.estado());
         }
 
         disenoRepository.findFirstByIdpedidoOrderByVersionDesc(request.idpedido()).ifPresent(anterior -> {
-            if (anterior.getEstado() == EstadoDiseno.APROBADO) {
+            if (anterior.getEstado() == EstadoDiseno.APROBADO)
                 throw new ReglaNegocioException("El pedido ya tiene un diseño aprobado (versión " + anterior.getVersion() + ")");
-            }
             anterior.setEstado(EstadoDiseno.REEMPLAZADO);
         });
 
@@ -82,16 +70,20 @@ public class DisenoService {
                 .fechaRegistro(LocalDateTime.now())
                 .build();
 
-        return DisenoResponse.from(disenoRepository.save(diseno));
+        Diseno guardado = disenoRepository.save(diseno);
+        if ("CONFIRMADO".equals(pedido.estado())) {
+            salesClient.cambiarEstado(request.idpedido(),
+                    new SalesServiceClient.CambioEstado("EN_DISENO", "Diseño iniciado por " + usuario.nombre()));
+        }
+        return DisenoResponse.from(guardado);
     }
 
     @Transactional
     public DisenoResponse actualizar(Integer id, DisenoRequest request) {
         Diseno diseno = buscar(id);
         exigirEnRevision(diseno, "Solo se puede editar un diseño en revisión");
-        if (!diseno.getIdpedido().equals(request.idpedido())) {
+        if (!diseno.getIdpedido().equals(request.idpedido()))
             throw new ReglaNegocioException("No se puede cambiar el pedido de un diseño; registre una nueva versión");
-        }
         diseno.setNombreArchivo(request.nombreArchivo());
         diseno.setUrlArchivo(request.urlArchivo());
         diseno.setDescripcion(request.descripcion());
@@ -107,15 +99,16 @@ public class DisenoService {
 
     @Transactional
     public DisenoResponse decidir(Integer id, DecisionRequest request, UsuarioActual usuario) {
-        Diseno diseno = buscarVisible(id, usuario);
+        Diseno diseno = buscar(id);
         exigirEnRevision(diseno, "Esta versión ya no está en revisión (estado " + diseno.getEstado() + ")");
-
         boolean aprobar = request.decision() == DecisionRequest.Decision.APROBAR;
-        if (!aprobar && (request.comentario() == null || request.comentario().isBlank())) {
-            throw new ReglaNegocioException("Indique qué cambios necesita en el comentario");
-        }
+        if (!aprobar && (request.comentario() == null || request.comentario().isBlank()))
+            throw new ReglaNegocioException("Indique la observación o cambio requerido");
         diseno.setEstado(aprobar ? EstadoDiseno.APROBADO : EstadoDiseno.OBSERVADO);
-        diseno.setComentarioCliente(request.comentario());
+        String comentario = request.comentario();
+        diseno.setComentarioCliente((comentario == null || comentario.isBlank())
+                ? "Validado internamente por " + usuario.nombre()
+                : comentario + " · validado por " + usuario.nombre());
         diseno.setFechaDecision(LocalDateTime.now());
         return DisenoResponse.from(disenoRepository.save(diseno));
     }
@@ -125,18 +118,7 @@ public class DisenoService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Diseño no encontrado"));
     }
 
-    /** El diseño de otro cliente se responde como inexistente. */
-    private Diseno buscarVisible(Integer id, UsuarioActual usuario) {
-        Diseno diseno = buscar(id);
-        if (!usuario.esAdmin() && !diseno.getCliente().equals(usuario.nombre())) {
-            throw new RecursoNoEncontradoException("Diseño no encontrado");
-        }
-        return diseno;
-    }
-
     private void exigirEnRevision(Diseno diseno, String mensaje) {
-        if (diseno.getEstado() != EstadoDiseno.EN_REVISION) {
-            throw new ReglaNegocioException(mensaje);
-        }
+        if (diseno.getEstado() != EstadoDiseno.EN_REVISION) throw new ReglaNegocioException(mensaje);
     }
 }
