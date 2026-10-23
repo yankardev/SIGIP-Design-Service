@@ -18,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/disenos")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMIN','OPERACIONES')")
 public class DisenoController {
 
     private final DisenoService service;
@@ -34,27 +35,23 @@ public class DisenoController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DisenoResponse> registrar(@Valid @RequestBody DisenoRequest request, Authentication auth) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.registrar(request, UsuarioActual.de(auth)));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<DisenoResponse> actualizar(@PathVariable Integer id, @Valid @RequestBody DisenoRequest request) {
         return ResponseEntity.ok(service.actualizar(id, request));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
         service.eliminar(id);
         return ResponseEntity.noContent().build();
     }
 
-    /** El cliente aprueba u observa la versión vigente de su diseño. */
+    /** Validación interna del arte antes de autorizar la producción. */
     @PostMapping("/{id}/decision")
-    @PreAuthorize("hasRole('CLIENTE')")
     public ResponseEntity<DisenoResponse> decidir(@PathVariable Integer id,
                                                   @Valid @RequestBody DecisionRequest request,
                                                   Authentication auth) {
